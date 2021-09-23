@@ -1,0 +1,169 @@
+---
+title: "SGH Technical Assessment"
+author: "Nur Insyirah Mahzan"
+date: "9/18/2021"
+output: html_document
+---
+### Import/Install libraries
+```{r}
+install.packages("countrycode")
+install.packages("dplyr")
+install.packages("ggplot2")
+
+library(countrycode)
+library(dplyr)
+library(ggplot2)
+```
+
+
+### Import datasets from github
+```{r}
+malaria_deaths <- read.csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2018/2018-11-13/malaria_deaths.csv")
+
+malaria_deaths_age <- read.csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2018/2018-11-13/malaria_deaths_age.csv")
+
+malaria_inc <- read.csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2018/2018-11-13/malaria_inc.csv")
+```
+
+### Data Exploration of the 3 datasets
+```{r}
+#Create function for initial data exploration (summary table and missing values)
+data_exploration <- function(df) {
+  print("Summary")
+  print(summary(df))
+
+  print("Count of Missing Values")
+  print(colSums(is.na(df)))
+  
+  unique(df[c("code")])
+
+}
+
+```
+##### malaria_deaths.csv dataset
+```{r}
+#Check data type & values
+glimpse(malaria_deaths)
+
+#changing column names to simplify
+colnames(malaria_deaths) <- c('entity','code','year','death_rate')
+
+data_exploration(malaria_deaths)
+```
+
+##### malaria_deaths_age.csv dataset
+```{r}
+glimpse(malaria_deaths_age)
+data_exploration(malaria_deaths_age)
+```
+
+##### malaria_inc.csv dataset
+```{r}
+glimpse(malaria_inc)
+
+#changing column names to simplify
+colnames(malaria_inc) <- c('entity','code','year','incidence_rate')
+         
+data_exploration(malaria_inc)
+```
+
+
+
+### Data Cleaning
+##### Remove Missing Values/Duplicates
+```{r}
+#Check for Duplicates
+sum(duplicated(malaria_deaths))
+sum(duplicated(malaria_deaths_age))
+sum(duplicated(malaria_inc))
+
+#Function to deal with missing values
+remove_missing_values <- function(df){
+  #replace with standard missing value type, NA
+  df <- df %>% mutate(code = replace(code, code == "", NA))
+
+  #check the data with missing value
+  colSums(is.na(df))
+  missing_DF <- subset(df, is.na(df$code))
+  print("Entities removed")
+  print(unique(missing_DF[c("entity")]))
+
+  # remove rows with missing value as they can be considered as duplicates (i.e. regions or countries alr captured under UK)
+  df2<- na.omit(df)
+  
+return(df2) 
+}
+
+malaria_deaths_df <- remove_missing_values(malaria_deaths)
+malaria_deaths_age_df <- remove_missing_values(malaria_deaths_age)
+malaria_inc_df <- remove_missing_values(malaria_inc)
+```
+
+##### Histogram
+```{r}
+ggplot(malaria_deaths_df, aes(x=death_rate)) + geom_histogram()
+ggplot(malaria_deaths_age_df, aes(x=deaths)) + geom_histogram()
+ggplot(malaria_inc_df, aes(x=incidence_rate)) + geom_histogram()
+```
+
+
+### Data Preparation
+##### Create a Region Column
+```{r}
+
+#Function to create a dataframe with a 'region' column using the 'Code' column
+create_region_df <- function(df) {
+df$region <- countrycode(sourcevar = df$code, origin = "iso3c", destination = "region", nomatch=NA)
+return(df)
+}
+
+#create region column & remove 'World' entity from dataframe
+malaria_deaths_df <- create_region_df(malaria_deaths_df) %>% na.omit()
+malaria_inc_df <- create_region_df(malaria_inc_df) %>% na.omit()
+malaria_deaths_age_df <- create_region_df(malaria_deaths_age_df) %>% na.omit()
+
+
+
+```
+
+
+```{r}
+##### Create Region level Dataset
+
+# death_region <- malaria_deaths_df %>% 
+#   group_by(region, year) %>% 
+#   summarise(death_rate = mean(death_rate))
+
+# death_age_region <- malaria_deaths_age_df %>% 
+#   group_by(region, year, age_group) %>% 
+#   summarise(deaths = mean(deaths))
+# 
+# inc_region <- malaria_inc_df %>% 
+#   group_by(region, year) %>% 
+#   summarise(incidence_rate = mean(incidence_rate))
+
+```
+
+##### Dataset for Visualisation
+```{r}
+#merge age-standardised death rate & incidence rate dataset (only years 2000, 2005, 2015 available)
+death_inc <- merge(malaria_deaths_df, malaria_inc_df, by= c("year","entity", "code", "region"))
+
+# Get most recent year's data i.e. 2015 data & export as csv
+recent_complete_df <- death_inc[death_inc$year == max(death_inc$year),]
+write.csv(recent_complete_df,"recent_year_viz.csv", row.names = FALSE)
+recent_age_df <- malaria_deaths_age_df[malaria_deaths_age_df$year == max(death_inc$year),]
+write.csv(recent_age_df,"recent_age_viz.csv", row.names = FALSE)
+
+```
+
+##### Export Dataset for Visualisation
+```{r}
+write.csv(malaria_deaths_df,"deaths_country_viz.csv", row.names = FALSE)
+write.csv(malaria_deaths_age_df,"deaths_age_country_viz.csv", row.names = FALSE)
+#write.csv(malaria_inc_df,"inc_country_viz.csv", row.names = FALSE)
+
+#write.csv(death_region,"deaths_region_viz.csv", row.names = FALSE)
+#write.csv(death_age_region,"deaths_age_region_viz.csv", row.names = FALSE)
+#write.csv(inc_region,"inc_region_viz.csv", row.names = FALSE)
+```

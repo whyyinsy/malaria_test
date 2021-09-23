@@ -1,0 +1,183 @@
+---
+title: "Malaria Health Risk Indicators Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    vertical_layout: scroll
+runtime: shiny
+
+---
+
+```{r setup, include=FALSE}
+install.packages("flexdashboard")
+install.packages("plotly")
+install.packages("dplyr")
+
+library(flexdashboard)
+library(plotly)
+library(dplyr)
+```
+
+```{r}
+recent_year <-read.csv('recent_year_viz.csv')
+age_country <-  read.csv('deaths_age_country_viz.csv')
+death_country <-  read.csv("deaths_country_viz.csv")
+
+```
+Overview in `r max(recent_year$year)` {data-orientation=rows}
+=====================================  
+This dashboard is split into 2 pages, this dashboard gives an overview of the global incidence rate and death rate of Malaria in the year of `r max(recent_year$year)`. Click on 'Trend over the years' tab to view the other dashboard which gives insight on the trend over a longer horizon.
+
+Row
+-------------------------------------
+
+### Average Global Incidence Rate per 1,000 population {.value-box}
+
+```{r}
+total_ir <- mean(recent_year$incidence_rate)
+
+# Put valueBox() inside renderValueBox({}) and round off value to 2 decimal place
+renderValueBox({
+  valueBox(value = round(x=total_ir, digits=2) , icon = "fas fa-users")
+})
+```
+
+
+### Average Global Age-Standardised Death Rate per 100,000 people {.value-box}
+
+```{r}
+
+total_dr <- mean(recent_year$death_rate)
+
+# Put valueBox() inside renderValueBox({}) and round off value to 2 decimal place
+renderValueBox({
+  valueBox(value = round(x=total_dr, digits=2), icon = "fas fa-users")
+})
+```    
+
+### Number of Deaths in millions {.value-box}
+
+```{r}
+total <- sum(age_country$deaths[age_country$year== max(recent_year$year)])/1000000
+
+# Put valueBox() inside renderValueBox({}) and round off value to 2 decimal place
+renderValueBox({
+  valueBox(value = round(x=total, digits=2), icon = "fas fa-users")
+})
+```    
+
+
+Row
+-------------------------------------
+### Geographical Representation of the Incidence  Rate of Malaria in `r max(recent_year$year)`
+```{r}
+
+# light grey boundaries
+l <- list(color = toRGB("grey"), width = 0.5)
+
+# specify map projection/options
+g <- list(
+  showframe = FALSE,
+  showcoastlines = FALSE,
+  projection = list(type = 'Mercator')
+)
+
+fig <- plot_geo(recent_year)
+fig <- fig %>% add_trace(
+    z = ~incidence_rate, color = ~incidence_rate, colors = 'Reds',
+    text = ~entity, locations = ~code, marker = list(line = l)
+  )
+fig <- fig %>% colorbar(title = 'Incidence Rate per 1,000')
+fig <- fig %>% layout(
+    geo = g
+  )
+
+fig
+
+```
+> Malaria is most prevalent in `r recent_year$entity[recent_year$incidence_rate==max(recent_year$incidence_rate)]`.
+
+Row
+-------------------------------------
+ 
+### Top 15 Countries with the highest death rates in `r max(recent_year$year)`.
+```{r}
+topdc <- recent_year %>%
+          filter(rank(desc(death_rate))<=15)
+```
+
+
+```{r}
+fig2 <- plot_ly(topdc, x = ~death_rate, y = ~entity, color= ~region, type = 'bar', orientation = 'h') %>%
+          layout(xaxis = list(title = 'Age-standardised death rate per 100,000 people'), yaxis = list(title = 'Countries'))
+fig2
+``` 
+
+> The age-standardised death rate (per 100,000 people) is highest amongst the following countries. The top 15 countries are in the `r unique(topdc$region)` region. Click on the Trend over Time tab to view the death rates of these countries over the years.
+
+### Percentage of deaths by age group
+In `r max(recent_year$year)`, the percentage of total deaths by age group is:
+```{r}
+df2 <- age_country[age_country$year == max(recent_year$year),]
+
+fig <- plot_ly(df2, type='pie', labels=~age_group, values=~deaths, 
+               textinfo='percent')
+fig
+```
+
+
+Trend over the years {data-orientation=rows}
+=====================================     
+In this dashboard, you can single-click on the legend to remove the item out from the visualisation. Double-clicking an item in the legend will result in the visualisation to highlight that item only.To undo, repeat the same steps.
+
+Row {data-height=500}
+-------------------------------------
+
+### Number of deaths by Regions over time
+```{r}
+max_year_df <- age_country[age_country$year == max(age_country$year),]
+min_year_df <- age_country[age_country$year == min(age_country$year),]
+```
+
+```{r}
+
+fig3 <- plot_ly(age_country, x = ~year, y = ~deaths, color = ~region, type='bar') %>% 
+          layout(barmode = 'stack') %>%
+    layout(
+      margin = list(b = 50, l = 50) # to fully display the x and y axis labels
+    )
+fig3
+```
+> Global deaths has significantly decreased from `r round(x=sum(min_year_df$deaths), digit=2)/1000000` million in the year `r min(age_country$year)` to `r round(x=sum(max_year_df$deaths), digit=2)/1000000` million in the year `r max(age_country$year)`. In the year `r max(age_country$year)`, the `r max_year_df$region[max_year_df$deaths==max(max_year_df$deaths)]` region is the largest contributor to the global deaths. 
+
+
+### Number of deaths by Age Group over time
+```{r}
+fig4 <- plot_ly(age_country, x = ~year, y = ~deaths, color = ~age_group, type='bar') %>% 
+          layout(barmode = 'stack')
+
+fig4
+```   
+
+```{r}
+age_df <- age_country[age_country$year == max(age_country$year),]
+``` 
+> In the year  `r max(age_country$year)`, the age-group that is the most vulnerable to Malaria are those aged `r age_df$age_group[age_df$deaths==max(age_df$deaths)]`. 
+
+
+Row {data-height=400}
+-------------------------------------
+
+### Age-standardised death rates of the top 15 countries in `r max(recent_year$year)` over the years
+
+```{r}
+
+top15 <- unique(topdc$entity)
+
+top15_df <- subset(death_country, entity %in% top15)
+  
+fig5 <- plot_ly(top15_df,x=~year, y=~death_rate, color=~entity, type='scatter', mode='line') %>%
+          layout(xaxis = list(title = 'year'), yaxis = list(title = 'Age-standardised death rate per 100,000 people'))
+
+fig5
+```   
+
